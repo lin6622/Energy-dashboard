@@ -295,7 +295,7 @@ st.markdown(
     unsafe_allow_html=True)
 with st.container(border=True):
     # Controls
-    colA, colB, colC, colD = st.columns([1.2, 1, 1, 1])
+    colA, colB, colC = st.columns([1.2, 1, 1])
     with colA:
         default_start = (df["datetime_utc"].max() + pd.Timedelta(hours=1)).to_pydatetime()
         date_val = st.date_input("Forecast start date (UTC)", value=default_start.date())
@@ -304,12 +304,8 @@ with st.container(border=True):
     with colB:
         horizon = st.number_input("Horizon (hours)", min_value=1, max_value=168, value=24, step=1)
     with colC:
-        scenario = st.selectbox(
-            "Scenario",
-            ["Hold constants from inputs", "Hourly averages by hour-of-day", "Last-day pattern"],
-        )
-    with colD:
         overlay_hist = st.checkbox("Overlay recent history", value=True)
+        st.caption("Scenario: **Last-day pattern**")
 
     # Future index & calendar features
     future_index = pd.date_range(start=start_dt, periods=horizon, freq="H")
@@ -318,43 +314,23 @@ with st.container(border=True):
     future["day_of_week"] = future["datetime_utc"].dt.dayofweek
     future["month"] = future["datetime_utc"].dt.month
 
-    # Exogenous columns
+    # Exogenous columns (drivers)
     exog_cols = [
         "Weather_Station_Weather_Igm", "Weather_Station_Weather_Ta",
         "total_cooling_pow", "cool_elec", "PV",
         "CHP_elec", "total_heat_prod", "CHP_heat"
     ]
-
-    # Scenario builders
-    if scenario == "Hold constants from inputs":
-        consts = {
-            "Weather_Station_Weather_Igm": igm,
-            "Weather_Station_Weather_Ta": temp,
-            "total_cooling_pow": cooling,
-            "cool_elec": cool_elec,
-            "PV": PV,
-            "CHP_elec": CHP_elec,
-            "total_heat_prod": heat_prod,
-            "CHP_heat": CHP_heat,
-        }
-        for c, v in consts.items():
-            future[c] = v
-
-    elif scenario == "Hourly averages by hour-of-day":
-        prof = df.groupby("hour")[exog_cols].mean().reindex(range(24)).ffill().bfill()
-        for c in exog_cols:
-            future[c] = future["hour"].map(prof[c])
-
-    else:  # Last-day pattern
-        last_n = min(24, len(df))
-        tail = df.tail(last_n).copy()
-        for c in exog_cols:
-            if c not in tail:
-                tail[c] = df[c].iloc[-last_n:]
-        reps = int(np.ceil(horizon / last_n))
-        patterned = pd.concat([tail[exog_cols]] * reps, ignore_index=True).iloc[:horizon]
-        for c in exog_cols:
-            future[c] = patterned[c].to_numpy()
+    # --- Last-day pattern ---
+    last_n = min(24, len(df))
+    tail = df.tail(last_n).copy()
+    for c in exog_cols:
+        if c not in tail:
+            # safety, in case a column is missing in the tail slice
+            tail[c] = df[c].iloc[-last_n:]
+    reps = int(np.ceil(horizon / last_n))
+    patterned = pd.concat([tail[exog_cols]] * reps, ignore_index=True).iloc[:horizon]
+    for c in exog_cols:
+        future[c] = patterned[c].to_numpy()
 
     # Derived interaction
     future["temp_cooling_interaction"] = (
@@ -394,16 +370,16 @@ with st.container(border=True):
         lower = future["Predicted_kW"] - 1.96 * rmse
         fig_fc.add_trace(go.Scatter(
             x=future["datetime_utc"], y=upper, mode="lines",
-            name="Upper (≈95%)", line=dict(width=0), showlegend=False
+            showlegend=False, line=dict(width=0)
         ))
         fig_fc.add_trace(go.Scatter(
             x=future["datetime_utc"], y=lower, mode="lines",
-            name="Lower (≈95%)", line=dict(width=0), fill="tonexty",
-            fillcolor="rgba(0,0,0,0.08)", showlegend=False
+            showlegend=False, line=dict(width=0), fill="tonexty",
+            fillcolor="rgba(0,0,0,0.08)"
         ))
 
     fig_fc.update_layout(
-        title="Forecasted Electricity Draw",
+        title="Forecasted Electricity Draw (Last-day pattern)",
         xaxis_title="Datetime (UTC)",
         yaxis_title="kW",
         margin=dict(l=40, r=20, t=60, b=40),
@@ -419,7 +395,6 @@ with st.container(border=True):
         file_name="forecast_hourly.csv",
         mime="text/csv",
     )
-
 # =========================
 # Energy Assistant (predefined Q&A)
 # =========================
@@ -500,6 +475,7 @@ if st.session_state.show_chat:
         if st.button("Reset conversation"):
             st.session_state.chat = []
             st.rerun()
+
 
 
 
