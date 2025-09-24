@@ -305,8 +305,6 @@ with st.container(border=True):
         horizon = st.number_input("Horizon (hours)", min_value=1, max_value=168, value=24, step=1)
     with colC:
         overlay_hist = st.checkbox("Overlay recent history", value=True)
-        st.caption("Scenario: **Last-day pattern**")
-
     # Future index & calendar features
     future_index = pd.date_range(start=start_dt, periods=horizon, freq="H")
     future = pd.DataFrame({"datetime_utc": future_index})
@@ -379,7 +377,7 @@ with st.container(border=True):
         ))
 
     fig_fc.update_layout(
-        title="Forecasted Electricity Draw (Last-day pattern)",
+        title="Forecasted Electricity Consumption",
         xaxis_title="Datetime (UTC)",
         yaxis_title="kW",
         margin=dict(l=40, r=20, t=60, b=40),
@@ -395,9 +393,7 @@ with st.container(border=True):
         file_name="forecast_hourly.csv",
         mime="text/csv",
     )
-# =========================
-# Energy Assistant (predefined Q&A)
-# =========================
+    #Chatbot
 def _top_peak_hours(dataframe: pd.DataFrame, k: int = 3) -> str:
     g = dataframe.groupby("hour")["total_elec_power_drawn"].mean().sort_values(ascending=False)
     top = g.head(k).round(2)
@@ -475,6 +471,7 @@ if st.session_state.show_chat:
         if st.button("Reset conversation"):
             st.session_state.chat = []
             st.rerun()
+
 
 
 
