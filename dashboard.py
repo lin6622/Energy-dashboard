@@ -179,7 +179,6 @@ h1, h2 = st.columns([8, 2])
 with h1:
     st.title("Smart Building Power Predictor")
     st.markdown("##### The energy consumption is calculated **per hour** based on selected parameters.")
-    st.caption(f"Loaded model from: `{_model_path}`  ·  data from: `{_data_path}`")
 with h2:
     label = " Open Energy Assistant" if not st.session_state.show_chat else "✖ Close Assistant"
     if st.button(label, use_container_width=True):
@@ -284,11 +283,13 @@ with right:
                        title="Cooling Power by Hour"),
                 use_container_width=True
             )
-
     with st.container(border=True):
         st.subheader("Dataset Sample")
-        st.dataframe(df.head(50), use_container_width=True)
-
+        st.dataframe(
+            df.head(10),
+            height=260,
+            use_container_width=True)
+        
 # =========================
 # Forecasts
 # =========================
@@ -500,3 +501,4 @@ if st.session_state.show_chat:
         if st.button("Reset conversation"):
             st.session_state.chat = []
             st.rerun()
+
