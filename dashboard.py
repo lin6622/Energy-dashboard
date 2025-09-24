@@ -18,10 +18,8 @@ def _apply_sidebar_state(is_open: bool, open_width_px: int = 380):
     if is_open:
         st.markdown(f"""
         <style>
-          /* Hide Streamlit's built-in sidebar hamburger */
           [data-testid="stSidebarNav"] {{ display: none !important; }}
-
-          /* Make the sidebar an off-canvas overlay */
+          /* Make  overlay */
           [data-testid="stSidebar"] {{
             position: fixed !important;
             top: 0 !important;
@@ -38,7 +36,6 @@ def _apply_sidebar_state(is_open: bool, open_width_px: int = 380):
             overflow: auto !important;
             border-right: 1px solid rgba(0,0,0,.08);
           }}
-
           /* Keep main app full width */
           [data-testid="stAppViewContainer"] {{ margin-left: 0 !important; }}
         </style>
@@ -79,7 +76,7 @@ _apply_sidebar_state(st.session_state.show_chat, open_width_px=380)
 # =========================
 # Google Drive: download folder & locate files
 # =========================
-# Your Drive folder link:
+# Drive folder link:
 # https://drive.google.com/drive/folders/1s6mIYgZ32hVyvypjPFGL4mUd_Uwz6cB1?usp=drive_link
 DEFAULT_GDRIVE_FOLDER_ID = "1s6mIYgZ32hVyvypjPFGL4mUd_Uwz6cB1"
 
@@ -294,7 +291,7 @@ with right:
 # Forecasts
 # =========================
 st.markdown(
-    "<h3 style='margin:6px 0 10px 0;'> Forecasts</h3>",
+    "<h3 style='padding:0px;'> Forecasts</h3>",
     unsafe_allow_html=True)
 with st.container(border=True):
     # Controls
@@ -503,5 +500,6 @@ if st.session_state.show_chat:
         if st.button("Reset conversation"):
             st.session_state.chat = []
             st.rerun()
+
 
 
