@@ -1,4 +1,3 @@
-#streamlit run C:\Users\Alin\CAPSTONE\dashboard\dashboard.py [ARGUMENTS]
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -9,6 +8,8 @@ import datetime as dt
 import os
 from pathlib import Path
 import gdown
+import random
+from textwrap import dedent
 
 # =========================
 # Page Setup
@@ -235,6 +236,138 @@ with left:
         )
         st.plotly_chart(fig, use_container_width=True)
 
+    # =========================
+    # TIP BOX GENERATOR (fills the empty space on the left)
+    # =========================
+    TIP_LIBRARY = {
+        "HVAC": [
+            "Increase cooling setpoint by 1 °C during occupied hours; widen deadbands by 1–2 °C.",
+            "Reset chilled-water/supply-air temperature based on outdoor air or load.",
+            "Verify economizer operation; use free cooling when outdoor conditions allow.",
+            "Reduce VAV minimum airflows and add supply fan VFD optimization.",
+            "Stagger chiller/boiler staging; avoid short cycling and maintain ΔT.",
+            "Night pre-cool/purge to shift cooling to off-peak hours when outdoor air is cooler.",
+            "Clean coils and replace dirty filters to improve heat-exchange efficiency.",
+        ],
+        "Lighting": [
+            "Upgrade remaining fixtures to LED; target 110–130 lm/W.",
+            "Enable daylight dimming near windows and atriums.",
+            "Tune occupancy sensor timeouts (e.g., 10–15 min) and coverage.",
+            "Implement task lighting and reduce ambient setpoints by 10–20%.",
+        ],
+        "Schedules": [
+            "Tighten start/stop times from trend logs; reduce early starts and late stops.",
+            "Use unoccupied set-backs for nights/weekends; verify holiday schedules.",
+            "Auto-off plug loads (printers, AV, vending) after hours via smart plugs.",
+            "Disable simultaneous heating and cooling with interlocks and valve checks.",
+        ],
+        "Renewables & Storage": [
+            "Shift flexible loads (ice-making, DHW preheat, charging) to PV-rich hours.",
+            "Curtail noncritical loads during peak tariff windows; automate with schedules.",
+            "If storage exists, charge at midday (PV) and discharge in evening peaks.",
+        ],
+        "Operations & Analytics": [
+            "Create weekly exception report for unusual overnight or weekend loads.",
+            "Trend key sensors (OAT, SAT, valve positions, kW) at 5–15 min intervals.",
+            "Calibrate faulty sensors; eliminate persistent overrides in the BMS.",
+            "Sub-meter tenants/end-uses to reveal hidden loads and leakage.",
+        ],
+        "Envelope": [
+            "Use blinds/film to limit solar gains on east/west façades.",
+            "Seal infiltration at doors and dock doors; implement closed-door policy.",
+        ],
+        "Process & Misc": [
+            "Raise server-room setpoints to 24–27 °C if ASHRAE class allows.",
+            "Install VFDs on pumps/fans and tune control loops to reduce hunting.",
+            "Fix compressed-air leaks; lower pressure setpoint when feasible.",
+        ],
+    }
+
+    def _top_peak_hours_list(dataframe: pd.DataFrame, k: int = 3):
+        return dataframe.groupby("hour")["total_elec_power_drawn"].mean().sort_values(ascending=False).head(k).index.tolist()
+
+    def generate_tailored_tips(n: int, focuses: list[str], context: dict) -> list[str]:
+        tips: list[str] = []
+
+        # Context-aware nudges
+        if context["is_peak_hour"]:
+            tips.append("Defer noncritical loads and schedule batch processes away from current peak hours.")
+        if context["is_weekend"]:
+            tips.append("Apply unoccupied weekend schedules; verify AHUs and lights aren’t running unnecessarily.")
+        if context["is_hot_day"] or context["high_cooling"]:
+            tips.append("Widen cooling deadband by 1–2 °C and enable night pre-cool to reduce peak compressor hours.")
+        if context["pv_midday"]:
+            tips.append("Align flexible loads to midday when PV is available; pre-cool or pre-heat during solar peak.")
+        if context["high_pred_load"]:
+            tips.append("Investigate high load drivers (cooling, plug loads) and enable automated peak demand limits.")
+
+        # Pad with curated tips by selected focus
+        pool = []
+        for k in focuses:
+            pool.extend(TIP_LIBRARY.get(k, []))
+
+        random.shuffle(pool)
+        for t in pool:
+            if len(tips) >= n:
+                break
+            if t not in tips:
+                tips.append(t)
+
+        return tips[:n]
+
+    with st.container(border=True):
+        st.subheader("Tip Box – Energy Saving Suggestions")
+
+        # Controls
+        default_focus = ["HVAC", "Schedules", "Lighting"]
+        focus_areas = st.multiselect(
+            "Focus areas", list(TIP_LIBRARY.keys()),
+            default=default_focus, help="Choose the categories to draw tips from."
+        )
+        n_tips = st.slider("How many tips?", 1, 10, 5, help="Number of suggestions to generate.")
+        tailored = st.checkbox("Tailor tips to current inputs", value=True)
+
+        # Prepare context from current selections and dataset stats
+        q75_temp = float(df["Weather_Station_Weather_Ta"].quantile(0.75))
+        q75_cool = float(df["total_cooling_pow"].quantile(0.75))
+        q75_load = float(df["total_elec_power_drawn"].quantile(0.75))
+        peak_hours = _top_peak_hours_list(df, k=3)
+
+        # Temporary prediction for context (safe: we already compute y_pred on the right as well)
+        _ctx_pred = float(model.predict(input_df)[0])
+
+        context = {
+            "is_peak_hour": hour in peak_hours,
+            "is_weekend": day_of_week >= 5,
+            "is_hot_day": temp >= q75_temp,
+            "high_cooling": cooling >= q75_cool,
+            "pv_midday": 10 <= hour <= 15 and PV > 0,
+            "high_pred_load": _ctx_pred >= q75_load,
+        }
+
+        # Generate & render
+        if st.button("Generate tips", use_container_width=True):
+            tips = generate_tailored_tips(n_tips, focus_areas, context)
+
+            # Highlighted tip
+            if tips:
+                st.success(f"**Tip of the moment:** {tips[0]}")
+
+            # List the rest
+            if len(tips) > 1:
+                st.markdown("**More suggestions:**")
+                st.markdown("\n".join([f"- {t}" for t in tips[1:]]))
+
+            # Download
+            tips_md = "# Energy Saving Tips\n\n" + "\n".join([f"- {t}" for t in tips])
+            st.download_button(
+                "Download tips (.md)",
+                data=tips_md.encode("utf-8"),
+                file_name="energy_saving_tips.md",
+                mime="text/markdown",
+                use_container_width=True
+            )
+
 with right:
     with st.container(border=True):
         st.subheader(" Energy consumption (kW per Hour)")
@@ -392,13 +525,21 @@ with st.container(border=True):
 
     if rmse is not None:
         upper = future["Predicted_kW"] + 1.96 * rmse
-        lower = future["Predicted_kW"] - 1.96 * rmse
+        lower = future["Predicted_KW"] - 1.96 * rmse if "Predicted_KW" in future else future["Predicted_kW"] - 1.96 * rmse
+        # Ensure correct key
+        if "Predicted_KW" in future:
+            lower_series = lower
+            upper_series = upper
+        else:
+            lower_series = lower
+            upper_series = upper
+
         fig_fc.add_trace(go.Scatter(
-            x=future["datetime_utc"], y=upper, mode="lines",
+            x=future["datetime_utc"], y=upper_series, mode="lines",
             name="Upper (≈95%)", line=dict(width=0), showlegend=False
         ))
         fig_fc.add_trace(go.Scatter(
-            x=future["datetime_utc"], y=lower, mode="lines",
+            x=future["datetime_utc"], y=lower_series, mode="lines",
             name="Lower (≈95%)", line=dict(width=0), fill="tonexty",
             fillcolor="rgba(0,0,0,0.08)", showlegend=False
         ))
