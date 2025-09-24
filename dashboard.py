@@ -286,14 +286,16 @@ with right:
     with st.container(border=True):
         st.subheader("Dataset Sample")
         st.dataframe(
-            df.head(10),
-            height=260,
+            df.head(8),
+            height=220,
             use_container_width=True)
         
 # =========================
 # Forecasts
 # =========================
-st.header(" Forecasts")
+st.markdown(
+    "<h3 style='margin:6px 0 10px 0;'> Forecasts</h3>",
+    unsafe_allow_html=True)
 with st.container(border=True):
     # Controls
     colA, colB, colC, colD = st.columns([1.2, 1, 1, 1])
@@ -501,4 +503,5 @@ if st.session_state.show_chat:
         if st.button("Reset conversation"):
             st.session_state.chat = []
             st.rerun()
+
 
