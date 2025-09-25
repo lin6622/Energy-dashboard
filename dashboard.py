@@ -89,7 +89,7 @@ def _get_secret(key: str, default: str) -> str:
 
 FOLDER_ID = _get_secret("GDRIVE_FOLDER_ID", DEFAULT_GDRIVE_FOLDER_ID)
 
-LOCAL_CACHE_DIR = Path("Dasboard_pkl_data_cache")  # local cache dir
+LOCAL_CACHE_DIR = Path("Dashboard_pkl_data_cache")  # local cache dir
 
 def download_folder_if_needed(folder_id: str, out_dir: Path) -> Path:
     """Download entire Drive folder once into out_dir (if empty/missing)."""
@@ -471,6 +471,7 @@ if st.session_state.show_chat:
         if st.button("Reset conversation"):
             st.session_state.chat = []
             st.rerun()
+
 
 
 
