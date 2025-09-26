@@ -44,8 +44,6 @@ def _apply_sidebar_state(is_open: bool, open_width_px: int = 380):
         st.markdown("""
         <style>
           [data-testid="stSidebarNav"] { display: none !important; }
-
-          /* Hide the sidebar off-canvas */
           [data-testid="stSidebar"]{
             position: fixed !important;
             top: 0 !important;
@@ -58,8 +56,6 @@ def _apply_sidebar_state(is_open: bool, open_width_px: int = 380):
             visibility: hidden !important;
             overflow: hidden !important;
           }
-
-          /* Keep main app full width */
           [data-testid="stAppViewContainer"]{ margin-left: 0 !important; }
         </style>
         """, unsafe_allow_html=True)
@@ -76,23 +72,18 @@ _apply_sidebar_state(st.session_state.show_chat, open_width_px=380)
 # =========================
 # Google Drive: download folder & locate files
 # =========================
-# Drive folder link:
-# https://drive.google.com/drive/folders/1s6mIYgZ32hVyvypjPFGL4mUd_Uwz6cB1?usp=drive_link
 DEFAULT_GDRIVE_FOLDER_ID = "1s6mIYgZ32hVyvypjPFGL4mUd_Uwz6cB1"
 
 def _get_secret(key: str, default: str) -> str:
-    # Try Streamlit secrets; if not present, fall back to env var; then default
     try:
         return st.secrets[key]
     except Exception:
         return os.getenv(key, default)
 
 FOLDER_ID = _get_secret("GDRIVE_FOLDER_ID", DEFAULT_GDRIVE_FOLDER_ID)
-
 LOCAL_CACHE_DIR = Path("Dashboard_pkl_data_cache")  # local cache dir
 
 def download_folder_if_needed(folder_id: str, out_dir: Path) -> Path:
-    """Download entire Drive folder once into out_dir (if empty/missing)."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     has_files = any(out_dir.rglob("*"))
@@ -101,20 +92,17 @@ def download_folder_if_needed(folder_id: str, out_dir: Path) -> Path:
             id=folder_id,
             output=str(out_dir),
             quiet=False,
-            use_cookies=False  # folder must be shared "Anyone with the link"
+            use_cookies=False
         )
     return out_dir
 
 def find_file(root: Path, prefer_contains: list[str], extensions: tuple[str, ...]) -> Path | None:
-    """Find a file under root that matches preferred name hints and extension; fallback to first extension match."""
     root = Path(root)
-    # pass 1: prefer names containing hints
     for p in root.rglob("*"):
         if p.is_file() and p.suffix.lower() in extensions:
             name = p.name.lower()
             if any(h in name for h in (h.lower() for h in prefer_contains)):
                 return p
-    # pass 2: first file with extension
     for p in root.rglob("*"):
         if p.is_file() and p.suffix.lower() in extensions:
             return p
@@ -122,32 +110,18 @@ def find_file(root: Path, prefer_contains: list[str], extensions: tuple[str, ...
 
 @st.cache_resource(show_spinner=True)
 def load_model_and_data_from_drive(folder_id: str):
-    # ensure local copy of the folder
     local_root = download_folder_if_needed(folder_id, LOCAL_CACHE_DIR)
-
-    # try to find model .pkl and dataset .csv
-    model_path = find_file(
-        local_root,
-        prefer_contains=["stacked", "model", "xgb", "rfr"],
-        extensions=(".pkl",)
-    )
-    data_path = find_file(
-        local_root,
-        prefer_contains=["smart_building", "dataset", "data"],
-        extensions=(".csv",)
-    )
-
+    model_path = find_file(local_root, prefer_contains=["stacked", "model", "xgb", "rfr"], extensions=(".pkl",))
+    data_path  = find_file(local_root, prefer_contains=["smart_building", "dataset", "data"], extensions=(".csv",))
     if model_path is None:
-        st.error("Couldn't find a .pkl model in the Google Drive folder. "
-                 "Please ensure the folder contains your model file.")
+        st.error("Couldn't find a .pkl model in the Google Drive folder.")
         st.stop()
     if data_path is None:
-        st.error("Couldn't find a .csv dataset in the Google Drive folder. "
-                 "Please ensure the folder contains your dataset file.")
+        st.error("Couldn't find a .csv dataset in the Google Drive folder.")
         st.stop()
-
     model = joblib.load(model_path)
     df = pd.read_csv(data_path)
+    st.caption(f"Loaded model from: `{model_path}` · data from: `{data_path}`")
     return model, df, model_path, data_path
 
 # =========================
@@ -157,9 +131,9 @@ model, df, _model_path, _data_path = load_model_and_data_from_drive(FOLDER_ID)
 
 # Preprocessing
 df['datetime_utc'] = pd.to_datetime(df['datetime_utc'])
-df['hour'] = df['datetime_utc'].dt.hour
-df['day_of_week'] = df['datetime_utc'].dt.dayofweek
-df['month'] = df['datetime_utc'].dt.month
+df['hour']         = df['datetime_utc'].dt.hour
+df['day_of_week']  = df['datetime_utc'].dt.dayofweek
+df['month']        = df['datetime_utc'].dt.month
 df['temp_cooling_interaction'] = df['Weather_Station_Weather_Ta'] * df['total_cooling_pow']
 
 features = [
@@ -190,18 +164,18 @@ left, right = st.columns([1, 2])
 with left:
     with st.container(border=True):
         st.subheader("Input parameters")
-        hour = st.slider("Hour", 0, 23, 12)
-        temp = st.number_input("Temperature (Ta)", value=25.0, step=0.1, format="%.2f")
-        cooling = st.number_input("Cooling Power", value=500.0, step=100.0, format="%.2f")
-        PV = st.slider("PV Output", 0, 1000, 200)
+        hour   = st.slider("Hour", 0, 23, 12)
+        temp   = st.number_input("Temperature (Ta)", value=25.0, step=0.1, format="%.2f")
+        cooling= st.number_input("Cooling Power", value=500.0, step=100.0, format="%.2f")
+        PV     = st.slider("PV Output", 0, 1000, 200)
         CHP_elec = st.slider("CHP Electricity", -200000, 200000, 0)
         CHP_heat = st.slider("CHP Heat", 0, 300000, 100000)
         heat_prod = st.slider("Total Heat Production", 0, 500000, 250000)
         cool_elec = st.slider("Cool Electric Load", 0, 100000, 50000)
-        igm = st.slider("IGM Radiation", 0, 1000, 500)
+        igm     = st.slider("IGM Radiation", 0, 1000, 500)
         day_of_week = st.selectbox("Day of Week", list(range(7)),
                                    format_func=lambda x: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][x])
-        month = st.selectbox("Month", list(range(1,13)))
+        month  = st.selectbox("Month", list(range(1,13)))
         temp_cooling_interaction = temp * cooling
 
     input_df = pd.DataFrame([[igm, temp, cooling, cool_elec, PV, CHP_elec, heat_prod, CHP_heat,
@@ -211,23 +185,17 @@ with left:
     with st.container(border=True):
         st.subheader("Average Power Draw by Day of Week")
         avg_power_day = df.groupby('day_of_week')['total_elec_power_drawn'].mean().reset_index()
-        avg_power_day['day'] = avg_power_day['day_of_week'].map({
-            0: 'Mon', 1: 'Tue', 2: 'Wed', 3: 'Thu', 4: 'Fri', 5: 'Sat', 6: 'Sun'
-        })
-        fig_day = px.bar(
-            avg_power_day, x='day', y='total_elec_power_drawn',
-            labels={'total_elec_power_drawn': 'Avg Power (kW)', 'day': 'Day of Week'},
-            title="Average Power by Day", text_auto='.2s'
-        )
+        avg_power_day['day'] = avg_power_day['day_of_week'].map({0:'Mon',1:'Tue',2:'Wed',3:'Thu',4:'Fri',5:'Sat',6:'Sun'})
+        fig_day = px.bar(avg_power_day, x='day', y='total_elec_power_drawn',
+                         labels={'total_elec_power_drawn': 'Avg Power (kW)', 'day': 'Day of Week'},
+                         title="Average Power by Day", text_auto='.2s')
         st.plotly_chart(fig_day, use_container_width=True)
 
     with st.container(border=True):
         st.subheader("Power Draw Distribution")
-        fig = px.histogram(
-            df, x='total_elec_power_drawn',
-            nbins=50, title="Distribution of Hourly Power Draw (kW)",
-            labels={'total_elec_power_drawn': 'Power Draw (kW)'}
-        )
+        fig = px.histogram(df, x='total_elec_power_drawn', nbins=50,
+                           title="Distribution of Hourly Power Draw (kW)",
+                           labels={'total_elec_power_drawn': 'Power Draw (kW)'})
         st.plotly_chart(fig, use_container_width=True)
 
 with right:
@@ -239,29 +207,23 @@ with right:
     with st.container(border=True):
         st.subheader("How Inputs Affect Predicted Energy consumption")
         simulate_df = df.sample(100).copy()
-        simulate_df['hour'] = hour
+        simulate_df['hour']  = hour
         simulate_df['Weather_Station_Weather_Ta'] = temp
         simulate_df['total_cooling_pow'] = cooling
         simulate_df['temp_cooling_interaction'] = simulate_df['Weather_Station_Weather_Ta'] * simulate_df['total_cooling_pow']
         simulate_df_pred = model.predict(simulate_df[features])
         st.plotly_chart(
-            px.line(
-                x=range(len(simulate_df_pred)), y=simulate_df_pred,
-                labels={'x': 'Simulation Point', 'y': 'Predicted Power Draw'},
-                title="Simulated Power Draw With Input Changes"
-            ),
+            px.line(x=range(len(simulate_df_pred)), y=simulate_df_pred,
+                    labels={'x': 'Simulation Point', 'y': 'Predicted Power Draw'},
+                    title="Simulated Power Draw With Input Changes"),
             use_container_width=True
         )
 
     with st.container(border=True):
         st.subheader("Temperature vs Power Draw")
         st.plotly_chart(
-            px.scatter(
-                df.sample(200),
-                x='Weather_Station_Weather_Ta', y='total_elec_power_drawn',
-                color='total_cooling_pow',
-                title="Temperature vs Energy consumption by cooling"
-            ),
+            px.scatter(df.sample(200), x='Weather_Station_Weather_Ta', y='total_elec_power_drawn',
+                       color='total_cooling_pow', title="Temperature vs Energy consumption by cooling"),
             use_container_width=True
         )
 
@@ -269,33 +231,22 @@ with right:
         st.subheader("Energy Trends")
         col1, col2 = st.columns(2)
         with col1:
-            st.plotly_chart(
-                px.line(df.head(200), x='datetime_utc', y='total_elec_power_drawn',
-                        title="Electricity Draw Over Time"),
-                use_container_width=True
-            )
+            st.plotly_chart(px.line(df.head(200), x='datetime_utc', y='total_elec_power_drawn',
+                                    title="Electricity Draw Over Time"), use_container_width=True)
         with col2:
-            st.plotly_chart(
-                px.bar(df.head(100), x='hour', y='total_cooling_pow',
-                       title="Cooling Power by Hour"),
-                use_container_width=True
-            )
+            st.plotly_chart(px.bar(df.head(100), x='hour', y='total_cooling_pow',
+                                   title="Cooling Power by Hour"), use_container_width=True)
     with st.container(border=True):
         st.subheader("Dataset Sample")
-        st.dataframe(
-            df.head(8),
-            height=220,
-            use_container_width=True)
-        
+        st.dataframe(df.head(8), height=220, use_container_width=True)
+
 # =========================
 # Forecasts
 # =========================
-st.markdown(
-    "<h3 style='padding:0px;'> Forecasts</h3>",
-    unsafe_allow_html=True)
+st.markdown("<h3 style='padding:0px;'> Forecasts</h3>", unsafe_allow_html=True)
 with st.container(border=True):
     # Controls
-    colA, colB, colC = st.columns([1.2, 1, 1])
+    colA, colB, colC, colD = st.columns([1.2, 1, 1.6, 1])
     with colA:
         default_start = (df["datetime_utc"].max() + pd.Timedelta(hours=1)).to_pydatetime()
         date_val = st.date_input("Forecast start date (UTC)", value=default_start.date())
@@ -304,13 +255,20 @@ with st.container(border=True):
     with colB:
         horizon = st.number_input("Horizon (hours)", min_value=1, max_value=168, value=24, step=1)
     with colC:
+        scenario = st.selectbox(
+            "Scenario (drivers for future hours)",
+            ["Hold constants from inputs", "Hourly averages by hour-of-day (wkdy/wkend)", "Last-day pattern"],
+            index=0  # default = responds to sliders
+        )
+    with colD:
         overlay_hist = st.checkbox("Overlay recent history", value=True)
+
     # Future index & calendar features
     future_index = pd.date_range(start=start_dt, periods=horizon, freq="H")
     future = pd.DataFrame({"datetime_utc": future_index})
-    future["hour"] = future["datetime_utc"].dt.hour
+    future["hour"]        = future["datetime_utc"].dt.hour
     future["day_of_week"] = future["datetime_utc"].dt.dayofweek
-    future["month"] = future["datetime_utc"].dt.month
+    future["month"]       = future["datetime_utc"].dt.month
 
     # Exogenous columns (drivers)
     exog_cols = [
@@ -318,35 +276,63 @@ with st.container(border=True):
         "total_cooling_pow", "cool_elec", "PV",
         "CHP_elec", "total_heat_prod", "CHP_heat"
     ]
-    # --- Last-day pattern ---
-    last_n = min(24, len(df))
-    tail = df.tail(last_n).copy()
-    for c in exog_cols:
-        if c not in tail:
-            # safety, in case a column is missing in the tail slice
-            tail[c] = df[c].iloc[-last_n:]
-    reps = int(np.ceil(horizon / last_n))
-    patterned = pd.concat([tail[exog_cols]] * reps, ignore_index=True).iloc[:horizon]
-    for c in exog_cols:
-        future[c] = patterned[c].to_numpy()
+
+    # ---------- Scenarios ----------
+    if scenario == "Hold constants from inputs":
+        consts = {
+            "Weather_Station_Weather_Igm": igm,
+            "Weather_Station_Weather_Ta":  temp,
+            "total_cooling_pow":           cooling,
+            "cool_elec":                   cool_elec,
+            "PV":                          PV,
+            "CHP_elec":                    CHP_elec,
+            "total_heat_prod":             heat_prod,
+            "CHP_heat":                    CHP_heat,
+        }
+        future = future.assign(**consts)
+
+    elif scenario == "Hourly averages by hour-of-day (wkdy/wkend)":
+        df["is_weekend"] = df["day_of_week"].isin([5, 6]).astype(int)
+        future["is_weekend"] = future["day_of_week"].isin([5, 6]).astype(int)
+        prof = df.groupby(["is_weekend", "hour"])[exog_cols].mean().reset_index()
+        future = future.merge(prof, on=["is_weekend", "hour"], how="left")
+        future[exog_cols] = future[exog_cols].ffill().bfill()
+
+    else:  # "Last-day pattern"
+        last_n = min(24, len(df))
+        tail = df.tail(last_n).copy()
+        for c in exog_cols:
+            if c not in tail:
+                tail[c] = df[c].iloc[-last_n:]
+        reps = int(np.ceil(horizon / last_n))
+        patterned = pd.concat([tail[exog_cols]] * reps, ignore_index=True).iloc[:horizon]
+        future[exog_cols] = patterned.to_numpy()
+
+    # Ensure numeric dtypes (avoid accidental object columns)
+    future[exog_cols] = future[exog_cols].apply(pd.to_numeric, errors="coerce")
 
     # Derived interaction
     future["temp_cooling_interaction"] = (
         future["Weather_Station_Weather_Ta"] * future["total_cooling_pow"]
     )
 
-    # Predict
-    future_pred = model.predict(future[features])
-    future["Predicted_kW"] = future_pred
+    # Predict & clip to non-negative
+    yhat = model.predict(future[features])
+    future["Predicted_kW"] = np.clip(yhat, 0, None)
 
-    # Approx uncertainty band (±1.96 * RMSE)
+    # Approx uncertainty band (prefer held-out RMSE if available)
+    rmse = None
     try:
-        sample_hist = df.sample(min(5000, len(df)), random_state=42)
-        hist_pred = model.predict(sample_hist[features])
-        resid = sample_hist["total_elec_power_drawn"].to_numpy() - hist_pred
-        rmse = float(np.sqrt(np.mean(resid ** 2)))
+        metrics = joblib.load("eval_metrics.pkl")
+        rmse = float(metrics.get("rmse_test"))
     except Exception:
-        rmse = None
+        try:
+            sample_hist = df.sample(min(5000, len(df)), random_state=42)
+            hist_pred = model.predict(sample_hist[features])
+            resid = sample_hist["total_elec_power_drawn"].to_numpy() - hist_pred
+            rmse = float(np.sqrt(np.mean(resid ** 2)))
+        except Exception:
+            rmse = None
 
     # Plot
     fig_fc = go.Figure()
@@ -366,15 +352,11 @@ with st.container(border=True):
     if rmse is not None:
         upper = future["Predicted_kW"] + 1.96 * rmse
         lower = future["Predicted_kW"] - 1.96 * rmse
-        fig_fc.add_trace(go.Scatter(
-            x=future["datetime_utc"], y=upper, mode="lines",
-            showlegend=False, line=dict(width=0)
-        ))
-        fig_fc.add_trace(go.Scatter(
-            x=future["datetime_utc"], y=lower, mode="lines",
-            showlegend=False, line=dict(width=0), fill="tonexty",
-            fillcolor="rgba(0,0,0,0.08)"
-        ))
+        fig_fc.add_trace(go.Scatter(x=future["datetime_utc"], y=upper, mode="lines",
+                                    showlegend=False, line=dict(width=0)))
+        fig_fc.add_trace(go.Scatter(x=future["datetime_utc"], y=lower, mode="lines",
+                                    showlegend=False, line=dict(width=0),
+                                    fill="tonexty", fillcolor="rgba(0,0,0,0.08)"))
 
     fig_fc.update_layout(
         title="Forecasted Electricity Consumption",
@@ -383,6 +365,10 @@ with st.container(border=True):
         margin=dict(l=40, r=20, t=60, b=40),
     )
     st.plotly_chart(fig_fc, use_container_width=True)
+
+    with st.expander("Debug: first future row (exogenous drivers)"):
+        st.write(f"Scenario = {scenario}")
+        st.write(future.loc[:, ['datetime_utc'] + exog_cols].head(1).T)
 
     out = future[["datetime_utc"] + exog_cols + ["hour", "day_of_week", "month",
                                                  "temp_cooling_interaction", "Predicted_kW"]]
@@ -393,7 +379,13 @@ with st.container(border=True):
         file_name="forecast_hourly.csv",
         mime="text/csv",
     )
-    #Chatbot
+
+st.caption("Forecast scenario controls which drivers are used. Sliders affect the forecast only in "
+           "'Hold constants from inputs'. The other scenarios ignore slider inputs by design.")
+
+# =========================
+# Energy Assistant (predefined Q&A)
+# =========================
 def _top_peak_hours(dataframe: pd.DataFrame, k: int = 3) -> str:
     g = dataframe.groupby("hour")["total_elec_power_drawn"].mean().sort_values(ascending=False)
     top = g.head(k).round(2)
@@ -449,31 +441,17 @@ if st.session_state.show_chat:
     with st.sidebar:
         st.header(" Energy Assistant")
         with st.chat_message("assistant"):
-            st.markdown(
-                "Hi! I’m your energy assistant. Choose a question below. "
-                "Answers use the current inputs and model."
-            )
-
-        # Buttons for predefined questions
+            st.markdown("Hi! I’m your energy assistant. Choose a question below. Answers use the current inputs and model.")
         for i, q in enumerate(FAQ.keys()):
             if st.button(q, key=f"faq_{i}"):
                 st.session_state.chat.append({"role": "user", "content": q})
                 ans = FAQ[q]()
                 st.session_state.chat.append({"role": "assistant", "content": ans})
                 st.rerun()
-
-        # Render conversation
         for msg in st.session_state.chat:
             with st.chat_message("user" if msg["role"] == "user" else "assistant"):
                 st.markdown(msg["content"])
-
         st.caption(" ")
         if st.button("Reset conversation"):
             st.session_state.chat = []
             st.rerun()
-
-
-
-
-
-
